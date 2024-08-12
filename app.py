@@ -1,60 +1,51 @@
-from flask import Flask,jsonify,request
+from flask import Flask, render_template, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+from config import Config
+
 app = Flask(__name__)
+app.config.from_object(Config)
+db = SQLAlchemy(app)
 
-books = [
-    {"id":1,"title":"Book 1","author":"Author 1"},
-    {"id":2,"title":"Book 2","author":"Author 2"},
-    {"id":3,"title":"Book 3","author":"Author 3"},
-    {"id":4,"title":"Book 4","author":"Author 4"},
-    {"id":5,"title":"Book 5","author":"Author 5"},
-]
-@app.route('/', methods=['GET'])
-def home():
-    return 'home page'
+class TodoItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    task = db.Column(db.String(200), nullable=False)
+    completed = db.Column(db.Boolean, default=False)
 
-# route to get all books
-@app.route('/books', methods=['GET'])
-def get_books():
-    return jsonify(books)
+    def __repr__(self):
+        return f'<TodoItem {self.task}>'
 
-# route to get a specific book by ID
-@app.route('/books/<int:book_id>', methods=['GET'])
-def get_book(book_id):
-    for book in books:
-        if book['id']== book_id:
-            return jsonify(book)
-    return jsonify({'error':'Book not found'})
+with app.app_context():
+    db.create_all()
 
-# route to add a new book
-@app.route('/books', methods=['POST'])
-def add_books():
-    new_book = {
-        "id":request.json['id'],
-        "title":request.json['title'],
-        "author":request.json['author'],
-    }
-    books.append(new_book)
-    return jsonify({'message':'Book added successfully'})
+@app.route('/')
+def index():
+    tasks = TodoItem.query.all()
+    return render_template('index.html', tasks=tasks)
 
-# route to update an existing book
-@app.route('/books/<int:book_id>', methods=['PUT'])
-def update_book(book_id):
-    for book in books:
-        if book['id']== book_id:
-            book['title']=request.json['title']
-            book['author']=request.json['author']
-            return jsonify({'message':'Book updated successfully'})  
-    return jsonify({'error':'Book not found'})
+@app.route('/add', methods=['POST'])
+def add():
+    task = request.form.get('task')
+    if task:
+        new_task = TodoItem(task=task)
+        db.session.add(new_task)
+        db.session.commit()
+    return redirect(url_for('index'))
 
-# route to delete a book
-@app.route('/books/<int:book_id>', methods=['DELETE'])
-def delete_book(book_id):
-    for book in books:
-        if book['id']== book_id:
-            books.remove(book)
-            return jsonify({'message':'Book deleted successfully'})  
-    return jsonify({'error':'Book not found'})
+@app.route('/delete/<int:task_id>')
+def delete(task_id):
+    task = TodoItem.query.get(task_id)
+    if task:
+        db.session.delete(task)
+        db.session.commit()
+    return redirect(url_for('index'))
 
+@app.route('/complete/<int:task_id>')
+def complete(task_id):
+    task = TodoItem.query.get(task_id)
+    if task:
+        task.completed = not task.completed
+        db.session.commit()
+    return redirect(url_for('index'))
 
-if __name__=='__main__':
+if __name__ == '__main__':
     app.run(debug=True)
